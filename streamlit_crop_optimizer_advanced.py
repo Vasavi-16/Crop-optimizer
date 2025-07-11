@@ -9,7 +9,7 @@ import numpy as np
 
 st.set_page_config(page_title="Field-Aware Crop Optimizer", layout="wide")
 st.title("Field-Aware Sustainable Crop Planning Optimization")
-st.markdown("This advanced system extends your crop planning model to consider multiple fields with different soil, water, and sustainability profiles.")
+st.markdown("This system extends our crop planning model to consider multiple fields with different soil, water, and sustainability profiles.")
 
 # Sidebar Inputs
 st.sidebar.header("General Parameters")
