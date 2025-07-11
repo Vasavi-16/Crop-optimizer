@@ -2,30 +2,28 @@ import streamlit as st
 from pulp import *
 import pandas as pd
 
-st.set_page_config(page_title="Field-Aware Crop Optimizer", layout="wide")
-st.title(" Field-Aware Sustainable Crop Planning Optimizer")
-st.markdown("This system extends our crop planning model to consider multiple fields with different soil, water and sustainability profiles.")
+st.set_page_config(page_title="Crop Optimizer", layout="wide")
+st.title("🌾 Field-Aware Sustainable Crop Planning Optimizer")
+st.markdown("This system optimizes crop planning across multiple fields based on profit, water availability, and fertilizer usage.")
 
 # Crops and Fields
 crops = ['Wheat', 'Rice', 'Maize', 'Soyabean', 'Cotton']
 fields = ['Field A', 'Field B', 'Field C']
 
-# Fixed realistic crop parameters (per hectare)
+# Crop parameters (per hectare)
 yield_per_ha = {'Wheat': 3.2, 'Rice': 4.5, 'Maize': 3.8, 'Soyabean': 2.5, 'Cotton': 2.2}
 price_per_ton = {'Wheat': 3000, 'Rice': 2800, 'Maize': 2700, 'Soyabean': 3500, 'Cotton': 4000}
 fertilizer_per_ha = {'Wheat': 100, 'Rice': 120, 'Maize': 90, 'Soyabean': 80, 'Cotton': 110}
 water_per_ha = {'Wheat': 1200000, 'Rice': 1800000, 'Maize': 1000000, 'Soyabean': 1100000, 'Cotton': 1500000}
-fertilizer_cost = 25
+fertilizer_cost = 25  # ₹/kg
 
-# Sidebar: Parameters
+# Sidebar Weights
 st.sidebar.header("⚖️ Weight Parameters")
-alpha = st.sidebar.slider("α: Water Scarcity", 0.0, 1.0, 0.3)
-beta = st.sidebar.slider("β: Fertilizer Use", 0.0, 1.0, 0.2)
-gamma = st.sidebar.slider("γ: Profit Importance", 0.0, 1.0, 0.8)
+alpha = st.sidebar.slider("Water Scarcity Weight (α)", 0.0, 1.0, 0.2)
+beta = st.sidebar.slider("Fertilizer Usage Weight (β)", 0.0, 1.0, 0.1)
+gamma = st.sidebar.slider("Profit Importance Weight (γ)", 0.0, 1.0, 0.9)
 
-debug_mode = st.sidebar.checkbox(" Enable Debug Mode")
-
-# Field inputs
+# Field Inputs
 st.subheader("📋 Field Characteristics")
 field_area = {}
 field_water = {}
@@ -35,21 +33,19 @@ for field in fields:
     st.markdown(f"**{field}**")
     col1, col2, col3 = st.columns(3)
     with col1:
-        field_area[field] = st.number_input(f"Area of {field} (ha)", min_value=0, value=1000, step=100, key=f"area_{field}")
+        field_area[field] = st.number_input(f"Area (ha)", min_value=0, value=1000, step=100, key=f"area_{field}")
     with col2:
-        # Increased water to ensure feasibility
-        field_water[field] = st.number_input(f"Water in {field} (liters)", min_value=0, value=200_000_000, step=1_000_000, key=f"water_{field}")
+        field_water[field] = st.number_input(f"Water Available (liters)", min_value=0, value=200_000_000, step=10_000_000, key=f"water_{field}")
     with col3:
-        # Higher rainfall index ensures better score
-        rainfall_index[field] = st.slider(f"Rainfall Index {field}", 0.0, 1.0, 0.85, key=f"rain_{field}")
+        rainfall_index[field] = st.slider(f"Rainfall Index (0–1)", 0.0, 1.0, 0.85, key=f"rain_{field}")
 
-if st.button(" Run Optimization"):
-    model = LpProblem("Field_Aware_Crop_Planning", LpMaximize)
-    land = LpVariable.dicts("Land", ((field, crop) for field in fields for crop in crops), lowBound=0, cat='Continuous')
-    
+# Optimization Logic
+if st.button("🚀 Run Optimization"):
+    model = LpProblem("Crop_Optimization", LpMaximize)
+    land = LpVariable.dicts("Land", ((f, c) for f in fields for c in crops), lowBound=0, cat='Continuous')
+
     hybrid_score = {}
 
-    # Compute score based on formula
     for field in fields:
         for crop in crops:
             Y = yield_per_ha[crop]
@@ -58,10 +54,12 @@ if st.button(" Run Optimization"):
             W = water_per_ha[crop]
             RI = rainfall_index[field]
 
-            profit = -(Y * P) - (F * fertilizer_cost)
-            sustain = beta * (F * fertilizer_cost) + alpha * (W * (1 - RI))
-            hybrid_cost = gamma * profit + sustain
-            hybrid_score[(field, crop)] = -hybrid_cost  # Flip to positive score
+            # Compute components
+            profit = Y * P
+            sustain_penalty = beta * (F * fertilizer_cost) + alpha * (W * (1 - RI))
+
+            # Final hybrid score
+            hybrid_score[(field, crop)] = gamma * profit - sustain_penalty
 
     # Objective
     model += lpSum([hybrid_score[(f, c)] * land[(f, c)] for f in fields for c in crops])
@@ -74,8 +72,8 @@ if st.button(" Run Optimization"):
     model.solve()
 
     if model.status == 1:
-        st.subheader(" Optimal Land Allocation (in ha)")
-        result_table = []
+        st.subheader("📊 Optimal Land Allocation (in ha)")
+        result_data = []
         total_score = 0
 
         for f in fields:
@@ -84,18 +82,11 @@ if st.button(" Run Optimization"):
                 area = land[f, c].varValue or 0
                 row[c] = round(area, 2)
                 total_score += hybrid_score[(f, c)] * area
-            result_table.append(row)
+            result_data.append(row)
 
-        df = pd.DataFrame(result_table)
+        df = pd.DataFrame(result_data)
         st.dataframe(df.style.format(precision=2), use_container_width=True)
 
-        st.success(f" Total Hybrid Score (Optimized Objective): **{total_score:,.2f}**")
-
-        # Optional Debug Mode
-        if debug_mode:
-            st.subheader(" Debug: Hybrid Scores (per ha)")
-            for f in fields:
-                for c in crops:
-                    st.write(f"{f} – {c}: {hybrid_score[(f, c)]:,.2f}")
+        st.success(f"✅ Total Hybrid Score: ₹{total_score:,.2f}")
     else:
-        st.error(" Optimization failed. Try increasing rainfall or water, or lowering weights.")
+        st.error("❌ Optimization failed. Try increasing water/rainfall or reducing weights.")
