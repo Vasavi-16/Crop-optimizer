@@ -1,13 +1,11 @@
 import streamlit as st
 from pulp import *
-import matplotlib.pyplot as plt
-import numpy as np
 
 st.set_page_config(page_title="Field-Aware Crop Optimizer", layout="wide")
 st.title("Field-Aware Sustainable Crop Planning Optimization")
 st.markdown("This system extends our crop planning model to consider multiple fields with different soil, water and sustainability profiles.")
 
-# Sidebar: Simplified General Parameters
+# Sidebar: Essential Controls
 st.sidebar.header("Available Resources")
 total_labor = st.sidebar.slider("Total Labor (man-days)", 10000, 150000, 90000, step=1000)
 total_equipment = st.sidebar.slider("Total Equipment Hours", 5000, 50000, 25000, step=500)
@@ -47,9 +45,6 @@ if st.button("Run Optimization"):
     model = LpProblem("Field_Aware_Crop_Planning", LpMaximize)
     land = LpVariable.dicts("Land", ((field, crop) for field in fields for crop in crops), lowBound=0, cat='Continuous')
 
-    profit_cost = {}
-    sustain_cost = {}
-    hybrid_cost = {}
     hybrid_score = {}
 
     for field in fields:
@@ -60,18 +55,16 @@ if st.button("Run Optimization"):
             W = water_per_ha[crop]
             RI = rainfall_index[field]
 
-            profit_cost[(field, crop)] = -(Y * P) - (F * fertilizer_cost)
-            sustain_cost[(field, crop)] = beta * (F * fertilizer_cost) + alpha * (W * (1 - RI))
-            hybrid_cost[(field, crop)] = gamma * profit_cost[(field, crop)] + sustain_cost[(field, crop)]
+            # Profit and sustainability cost
+            profit_cost = -(Y * P) - (F * fertilizer_cost)
+            sustain_cost = beta * (F * fertilizer_cost) + alpha * (W * (1 - RI))
+            hybrid_cost = gamma * profit_cost + sustain_cost
 
-            # ✅ FLIP COST TO SCORE (positive objective)
-            hybrid_score[(field, crop)] = -hybrid_cost[(field, crop)]
+            # FINAL SCORE (inverted cost)
+            hybrid_score[(field, crop)] = -hybrid_cost
 
-    # Objective: maximize total hybrid score (positive)
-    model += lpSum([
-        hybrid_score[(field, crop)] * land[(field, crop)]
-        for field in fields for crop in crops
-    ]), "Total_Hybrid_Score"
+    # Objective Function: maximize hybrid score
+    model += lpSum([hybrid_score[(field, crop)] * land[(field, crop)] for field in fields for crop in crops])
 
     # Constraints
     for field in fields:
@@ -86,17 +79,17 @@ if st.button("Run Optimization"):
     if model.status == 1:
         st.markdown("## Optimal Land Allocation (ha)")
         result_table = []
+        total_score = 0
         for field in fields:
             row = {'Field': field}
             for crop in crops:
-                row[crop] = round(land[field, crop].varValue or 0, 2)
+                area = land[field, crop].varValue or 0
+                row[crop] = round(area, 2)
+                total_score += hybrid_score[(field, crop)] * area
             result_table.append(row)
         st.dataframe(result_table)
 
-        total_score = sum(hybrid_score[(field, crop)] * land[field, crop].varValue for field in fields for crop in crops)
-        st.write(f"Total Hybrid Score (Optimized Value): {total_score:,.2f}")
+        st.success(f" Total Hybrid Score (Optimized Objective): {total_score:,.2f}")
     else:
-        st.error("Optimization failed. Please revise your inputs.")
-
-
+        st.error(" Optimization failed. Please revise your inputs.")
 
