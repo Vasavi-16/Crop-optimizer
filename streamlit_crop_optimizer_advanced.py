@@ -50,6 +50,7 @@ if st.button("Run Optimization"):
     profit_cost = {}
     sustain_cost = {}
     hybrid_cost = {}
+    hybrid_score = {}
 
     for field in fields:
         for crop in crops:
@@ -63,10 +64,14 @@ if st.button("Run Optimization"):
             sustain_cost[(field, crop)] = beta * (F * fertilizer_cost) + alpha * (W * (1 - RI))
             hybrid_cost[(field, crop)] = gamma * profit_cost[(field, crop)] + sustain_cost[(field, crop)]
 
+            # ✅ FLIP COST TO SCORE (positive objective)
+            hybrid_score[(field, crop)] = -hybrid_cost[(field, crop)]
+
+    # Objective: maximize total hybrid score (positive)
     model += lpSum([
-        -hybrid_cost[(field, crop)] * land[(field, crop)]
+        hybrid_score[(field, crop)] * land[(field, crop)]
         for field in fields for crop in crops
-    ]), "Total_Hybrid_Cost"
+    ]), "Total_Hybrid_Score"
 
     # Constraints
     for field in fields:
@@ -88,9 +93,10 @@ if st.button("Run Optimization"):
             result_table.append(row)
         st.dataframe(result_table)
 
-        total_cost = sum(hybrid_cost[(field, crop)] * land[field, crop].varValue for field in fields for crop in crops)
-        st.write(f"Total Hybrid Cost Value: ₹{total_cost:,.2f}")
+        total_score = sum(hybrid_score[(field, crop)] * land[field, crop].varValue for field in fields for crop in crops)
+        st.write(f"Total Hybrid Score (Optimized Value): {total_score:,.2f}")
     else:
         st.error("Optimization failed. Please revise your inputs.")
+
 
 
